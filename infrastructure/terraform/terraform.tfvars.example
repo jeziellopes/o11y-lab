@@ -1,0 +1,16 @@
+# Example terraform.tfvars file
+# Copy this to terraform.tfvars and adjust values
+
+aws_region         = "us-east-1"
+environment        = "dev"
+project_name       = "observability-demo"
+vpc_cidr           = "10.0.0.0/16"
+availability_zones = ["us-east-1a", "us-east-1b"]
+container_cpu      = 256
+container_memory   = 512
+enable_jaeger      = true
+
+# OpenTelemetry endpoint
+# For local Jaeger: http://jaeger:4318/v1/traces
+# For Grafana Cloud: https://your-endpoint.grafana.net/otlp/v1/traces
+otel_endpoint = "http://jaeger:4318/v1/traces"
