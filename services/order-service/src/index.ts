@@ -1,0 +1,283 @@
+/**
+ * Order Service
+ * Manages orders with user validation and async notifications
+ * Demonstrates inter-service communication and queue integration
+ */
+
+// Initialize OpenTelemetry BEFORE importing other modules
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+import { Resource } from '@opentelemetry/resources';
+import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
+
+const sdk = new NodeSDK({
+  resource: new Resource({
+    [SemanticResourceAttributes.SERVICE_NAME]: 'order-service',
+    [SemanticResourceAttributes.SERVICE_VERSION]: '1.0.0',
+  }),
+  traceExporter: new OTLPTraceExporter({
+    url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://jaeger:4318/v1/traces',
+  }),
+  instrumentations: [getNodeAutoInstrumentations()],
+});
+
+sdk.start();
+
+// Now import application modules
+import express, { Request, Response, NextFunction } from 'express';
+import axios from 'axios';
+import { createClient, RedisClientType } from 'redis';
+import { trace, SpanStatusCode, context, propagation } from '@opentelemetry/api';
+
+interface Order {
+  id: number;
+  userId: number;
+  items: string[];
+  total: number;
+  status: string;
+  createdAt: Date;
+  updatedAt?: Date;
+}
+
+const app = express();
+const PORT = process.env.PORT || 3002;
+const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://localhost:3001';
+const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
+const REDIS_PORT = parseInt(process.env.REDIS_PORT || '6379');
+
+app.use(express.json());
+
+// Redis client
+let redisClient: RedisClientType;
+
+async function initRedis() {
+  redisClient = createClient({
+    socket: {
+      host: REDIS_HOST,
+      port: REDIS_PORT
+    }
+  });
+
+  redisClient.on('error', (err) => console.error('Redis Client Error', err));
+  redisClient.on('connect', () => console.log('Connected to Redis'));
+
+  try {
+    await redisClient.connect();
+  } catch (err) {
+    console.error('Failed to connect to Redis:', err);
+  }
+}
+
+initRedis();
+
+// In-memory order store (mock database)
+const orders = new Map<number, Order>([
+  [1, { id: 1, userId: 1, items: ['Widget A', 'Widget B'], total: 150.00, status: 'completed', createdAt: new Date('2024-01-20') }],
+  [2, { id: 2, userId: 2, items: ['Gadget X'], total: 299.99, status: 'pending', createdAt: new Date('2024-02-15') }],
+]);
+let nextOrderId = 3;
+
+// Health check endpoint
+app.get('/health', (req: Request, res: Response) => {
+  res.json({ status: 'healthy', service: 'order-service' });
+});
+
+// Get all orders
+app.get('/orders', (req: Request, res: Response) => {
+  const tracer = trace.getTracer('order-service');
+  const span = tracer.startSpan('get-all-orders');
+  
+  span.setAttribute('order.count', orders.size);
+  span.addEvent('Fetching all orders from database');
+  
+  setTimeout(() => {
+    const orderList = Array.from(orders.values());
+    span.addEvent('Orders retrieved successfully', { count: orderList.length });
+    span.end();
+    res.json({ orders: orderList, count: orderList.length });
+  }, 40);
+});
+
+// Get order by ID
+app.get('/orders/:id', async (req: Request, res: Response) => {
+  const tracer = trace.getTracer('order-service');
+  const span = tracer.startSpan('get-order-by-id');
+  
+  const orderId = parseInt(req.params.id);
+  span.setAttribute('order.id', orderId);
+  
+  try {
+    const order = orders.get(orderId);
+    
+    if (!order) {
+      span.setStatus({ code: SpanStatusCode.ERROR, message: 'Order not found' });
+      span.setAttribute('error', true);
+      span.end();
+      return res.status(404).json({ error: 'Order not found' });
+    }
+    
+    // Fetch user details for the order
+    span.addEvent('Fetching user details');
+    const userResponse = await axios.get(`${USER_SERVICE_URL}/users/${order.userId}`);
+    
+    const enrichedOrder = {
+      ...order,
+      user: userResponse.data
+    };
+    
+    span.addEvent('Order retrieved with user details');
+    span.end();
+    res.json(enrichedOrder);
+  } catch (error) {
+    span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+    span.recordException(error);
+    span.end();
+    console.error('Error fetching order:', error.message);
+    res.status(500).json({ error: 'Failed to fetch order details' });
+  }
+});
+
+// Create new order
+app.post('/orders', async (req: Request, res: Response) => {
+  const tracer = trace.getTracer('order-service');
+  const span = tracer.startSpan('create-order');
+  
+  const { userId, items, total } = req.body;
+  
+  // Validation
+  if (!userId || !items || !total) {
+    span.setStatus({ code: SpanStatusCode.ERROR, message: 'Missing required fields' });
+    span.setAttribute('error', true);
+    span.end();
+    return res.status(400).json({ error: 'userId, items, and total are required' });
+  }
+  
+  span.setAttribute('order.userId', userId);
+  span.setAttribute('order.itemCount', items.length);
+  span.setAttribute('order.total', total);
+  
+  try {
+    // Validate user exists
+    span.addEvent('Validating user exists');
+    const userResponse = await axios.get(`${USER_SERVICE_URL}/users/${userId}`);
+    const user = userResponse.data;
+    
+    span.addEvent('User validated', { userName: user.name });
+    
+    // Create order
+    span.addEvent('Creating order in database');
+    const newOrder = {
+      id: nextOrderId++,
+      userId,
+      items,
+      total,
+      status: 'pending',
+      createdAt: new Date()
+    };
+    
+    orders.set(newOrder.id, newOrder);
+    
+    span.setAttribute('order.id', newOrder.id);
+    span.addEvent('Order created successfully');
+    
+    // Publish notification to queue
+    if (redisClient && redisClient.isOpen) {
+      span.addEvent('Publishing notification to queue');
+      
+      // Get current context for trace propagation
+      const currentContext = context.active();
+      const carrier = {};
+      propagation.inject(currentContext, carrier);
+      
+      const notification = {
+        type: 'order_created',
+        orderId: newOrder.id,
+        userId: userId,
+        userName: user.name,
+        total: total,
+        timestamp: new Date().toISOString(),
+        traceContext: carrier
+      };
+      
+      await redisClient.lPush('notifications', JSON.stringify(notification));
+      span.addEvent('Notification published to queue');
+    }
+    
+    span.end();
+    res.status(201).json(newOrder);
+  } catch (error) {
+    span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+    span.recordException(error);
+    span.end();
+    
+    console.error('Error creating order:', error.message);
+    
+    if (error.response?.status === 404) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.status(500).json({ error: 'Failed to create order' });
+  }
+});
+
+// Update order status
+app.patch('/orders/:id/status', (req: Request, res: Response) => {
+  const tracer = trace.getTracer('order-service');
+  const span = tracer.startSpan('update-order-status');
+  
+  const orderId = parseInt(req.params.id);
+  const { status } = req.body;
+  
+  span.setAttribute('order.id', orderId);
+  span.setAttribute('order.newStatus', status);
+  
+  const order = orders.get(orderId);
+  
+  if (!order) {
+    span.setStatus({ code: SpanStatusCode.ERROR, message: 'Order not found' });
+    span.setAttribute('error', true);
+    span.end();
+    return res.status(404).json({ error: 'Order not found' });
+  }
+  
+  order.status = status;
+  order.updatedAt = new Date();
+  
+  span.addEvent('Order status updated');
+  span.end();
+  
+  res.json(order);
+});
+
+// Error handling middleware
+app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({ error: 'Internal server error' });
+});
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`Order Service listening on port ${PORT}`);
+  console.log(`User Service URL: ${USER_SERVICE_URL}`);
+  console.log(`Redis: ${REDIS_HOST}:${REDIS_PORT}`);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  
+  if (redisClient) {
+    await redisClient.quit();
+  }
+  
+  sdk.shutdown()
+    .then(() => {
+      console.log('OpenTelemetry terminated');
+      process.exit(0);
+    })
+    .catch((error) => {
+      console.error('Error during shutdown', error);
+      process.exit(1);
+    });
+});
