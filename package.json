@@ -1,0 +1,28 @@
+{
+  "name": "observability-demo",
+  "version": "1.0.0",
+  "description": "Microservices observability demonstration with OpenTelemetry",
+  "private": true,
+  "workspaces": [
+    "services/*"
+  ],
+  "scripts": {
+    "dev": "docker-compose up",
+    "dev:build": "docker-compose up --build",
+    "down": "docker-compose down",
+    "clean": "docker-compose down -v",
+    "logs": "docker-compose logs -f"
+  },
+  "keywords": [
+    "observability",
+    "opentelemetry",
+    "microservices",
+    "tracing",
+    "jaeger"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
