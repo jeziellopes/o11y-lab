@@ -3,14 +3,15 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Copy package files
-COPY package*.json ./
-COPY tsconfig.json ./
+COPY services/order-service/package*.json ./
+COPY services/order-service/tsconfig.json ./
+COPY tsconfig.base.json ../tsconfig.base.json
 
 # Install all dependencies (including dev for TypeScript)
 RUN npm install
 
 # Copy source code
-COPY src ./src
+COPY services/order-service/src ./src
 
 # Build TypeScript
 RUN npm run build
