@@ -22,7 +22,7 @@ FROM node:20-alpine
 WORKDIR /app
 
 # Copy package files
-COPY package*.json ./
+COPY services/api-gateway/package*.json ./
 
 # Install production dependencies only
 RUN npm install --production
