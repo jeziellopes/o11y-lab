@@ -27,8 +27,8 @@ sdk.start();
 // Now import application modules
 import express, { Request, Response, NextFunction } from 'express';
 import axios from 'axios';
-import { createClient, RedisClientType } from 'redis';
-import { trace, SpanStatusCode, context, propagation } from '@opentelemetry/api';
+import { trace, SpanStatusCode } from '@opentelemetry/api';
+import { createQueueTransport, injectTraceContext, IQueueTransport } from '../../shared/queue';
 
 interface Order {
   id: number;
@@ -43,33 +43,14 @@ interface Order {
 const app = express();
 const PORT = process.env.PORT || 3002;
 const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://localhost:3001';
-const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
-const REDIS_PORT = parseInt(process.env.REDIS_PORT || '6382');
 
 app.use(express.json());
 
-// Redis client
-let redisClient: RedisClientType;
+let queue: IQueueTransport;
 
-async function initRedis() {
-  redisClient = createClient({
-    socket: {
-      host: REDIS_HOST,
-      port: REDIS_PORT
-    }
-  });
-
-  redisClient.on('error', (err) => console.error('Redis Client Error', err));
-  redisClient.on('connect', () => console.log('Connected to Redis'));
-
-  try {
-    await redisClient.connect();
-  } catch (err) {
-    console.error('Failed to connect to Redis:', err);
-  }
-}
-
-initRedis();
+createQueueTransport()
+  .then((t: IQueueTransport) => { queue = t; })
+  .catch((err: unknown) => console.error('Failed to initialize queue transport:', err));
 
 // In-memory order store (mock database)
 const orders = new Map<number, Order>([
@@ -183,25 +164,19 @@ app.post('/orders', async (req: Request, res: Response) => {
     span.addEvent('Order created successfully');
     
     // Publish notification to queue
-    if (redisClient && redisClient.isOpen) {
+    if (queue) {
       span.addEvent('Publishing notification to queue');
-      
-      // Get current context for trace propagation
-      const currentContext = context.active();
-      const carrier = {};
-      propagation.inject(currentContext, carrier);
-      
-      const notification = {
+
+      const notification = injectTraceContext({
         type: 'order_created',
         orderId: newOrder.id,
         userId: userId,
         userName: user.name,
         total: total,
         timestamp: new Date().toISOString(),
-        traceContext: carrier
-      };
-      
-      await redisClient.lPush('notifications', JSON.stringify(notification));
+      });
+
+      await queue.publish(notification);
       span.addEvent('Notification published to queue');
     }
     
@@ -265,15 +240,15 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
 app.listen(PORT, () => {
   console.log(`Order Service listening on port ${PORT}`);
   console.log(`User Service URL: ${USER_SERVICE_URL}`);
-  console.log(`Redis: ${REDIS_HOST}:${REDIS_PORT}`);
+  console.log(`Queue transport: ${process.env.QUEUE_TRANSPORT || 'redis'}`);
 });
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('SIGTERM received, shutting down gracefully');
-  
-  if (redisClient) {
-    await redisClient.quit();
+
+  if (queue) {
+    await queue.close();
   }
   
   sdk.shutdown()
