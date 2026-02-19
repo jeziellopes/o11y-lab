@@ -1,6 +1,6 @@
 /**
  * Notification Service
- * Consumes messages from Redis queue and processes notifications
+ * Consumes messages from the queue transport and processes notifications
  * Demonstrates async processing with distributed tracing
  */
 
@@ -26,87 +26,36 @@ sdk.start();
 
 // Now import application modules
 import express, { Request, Response } from 'express';
-import { createClient, RedisClientType } from 'redis';
 import { trace, context, propagation, SpanStatusCode, ROOT_CONTEXT } from '@opentelemetry/api';
+import { createQueueTransport, QueueMessage, IQueueTransport } from '../../shared/queue';
 
-interface Notification {
-  type: string;
-  orderId: number;
-  userId: number;
-  userName: string;
-  total: number;
-  timestamp: string;
-  traceContext?: Record<string, string>;
-}
+type Notification = QueueMessage;
 
 const app = express();
 const PORT = process.env.PORT || 3003;
-const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
-const REDIS_PORT = parseInt(process.env.REDIS_PORT || '6382');
 
 app.use(express.json());
 
-// Redis client
-let redisClient: RedisClientType;
-let isProcessing = false;
+let queue: IQueueTransport | null = null;
 
-async function initRedis() {
-  redisClient = createClient({
-    socket: {
-      host: REDIS_HOST,
-      port: REDIS_PORT
-    }
-  });
+// Initialize transport and start consuming
+createQueueTransport().then((t: IQueueTransport) => {
+  queue = t;
+  queue.consume(processNotification).catch((err: unknown) =>
+    console.error('Queue consumer error:', err)
+  );
+}).catch((err: unknown) => console.error('Failed to initialize queue transport:', err));
 
-  redisClient.on('error', (err) => console.error('Redis Client Error', err));
-  redisClient.on('connect', () => console.log('Connected to Redis'));
+async function processNotification(notification: Notification) {
+    
+    const tracer = trace.getTracer('notification-service');
 
   try {
-    await redisClient.connect();
-    console.log('Redis connection established');
-    
-    // Start processing queue
-    processQueue();
-  } catch (err) {
-    console.error('Failed to connect to Redis:', err);
-  }
-}
-
-// Process notifications from queue
-async function processQueue() {
-  if (isProcessing) return;
-  isProcessing = true;
-
-  console.log('Starting queue processor...');
-
-  while (isProcessing) {
-    try {
-      // Block and wait for new messages (BRPOP with 1 second timeout)
-      const result = await redisClient.brPop('notifications', 1);
-
-      if (result) {
-        const message = result.element;
-        await processNotification(message);
-      }
-    } catch (error) {
-      console.error('Error processing queue:', error);
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait before retrying
-    }
-  }
-}
-
-async function processNotification(message: string) {
-  const tracer = trace.getTracer('notification-service');
-  
-  try {
-    const notification: Notification = JSON.parse(message);
-    
-    // Extract trace context from message
-    const extractedContext = notification.traceContext 
+    const extractedContext = notification.traceContext
       ? propagation.extract(ROOT_CONTEXT, notification.traceContext)
       : ROOT_CONTEXT;
 
-    // Start a new span linked to the parent trace
+    // Extract trace context from message
     await context.with(extractedContext, async () => {
       const span = tracer.startSpan('process-notification');
       
@@ -156,10 +105,10 @@ async function simulateNotificationSending(notification: Notification, span: any
 
 // Health check endpoint
 app.get('/health', (req: Request, res: Response) => {
-  res.json({ 
-    status: 'healthy', 
+  res.json({
+    status: 'healthy',
     service: 'notification-service',
-    queueActive: isProcessing 
+    queueActive: queue !== null,
   });
 });
 
@@ -167,33 +116,25 @@ app.get('/health', (req: Request, res: Response) => {
 app.get('/stats', (req: Request, res: Response) => {
   res.json({
     service: 'notification-service',
-    queueActive: isProcessing,
-    redis: {
-      host: REDIS_HOST,
-      port: REDIS_PORT,
-      connected: redisClient?.isOpen || false
-    }
+    queueActive: queue !== null,
+    transport: process.env.QUEUE_TRANSPORT || 'redis',
   });
 });
 
 // Start server
 app.listen(PORT, () => {
   console.log(`Notification Service listening on port ${PORT}`);
-  console.log(`Redis: ${REDIS_HOST}:${REDIS_PORT}`);
+  console.log(`Queue transport: ${process.env.QUEUE_TRANSPORT || 'redis'}`);
 });
-
-// Initialize Redis and start processing
-initRedis();
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('SIGTERM received, shutting down gracefully');
-  isProcessing = false;
-  
-  if (redisClient) {
-    await redisClient.quit();
+
+  if (queue) {
+    await queue.close();
   }
-  
+
   sdk.shutdown()
     .then(() => {
       console.log('OpenTelemetry terminated');

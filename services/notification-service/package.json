@@ -2,10 +2,10 @@
   "name": "notification-service",
   "version": "1.0.0",
   "description": "Notification service with Redis queue consumer and OpenTelemetry tracing",
-  "main": "dist/index.js",
+  "main": "dist/notification-service/src/index.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
+    "start": "node dist/notification-service/src/index.js",
     "dev": "ts-node src/index.ts",
     "watch": "tsc --watch"
   },
@@ -13,6 +13,7 @@
     "express": "^4.18.2",
     "redis": "^4.6.12",
     "dotenv": "^16.3.1",
+    "@aws-sdk/client-sqs": "^3.0.0",
     "@opentelemetry/api": "^1.7.0",
     "@opentelemetry/sdk-node": "^0.45.1",
     "@opentelemetry/auto-instrumentations-node": "^0.40.3",
