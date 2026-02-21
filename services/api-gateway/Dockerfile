@@ -1,17 +1,18 @@
 FROM node:20-alpine AS builder
 
-WORKDIR /app
+WORKDIR /app/services/api-gateway
 
-# Copy package files
+# Copy package files and tsconfig
 COPY services/api-gateway/package*.json ./
 COPY services/api-gateway/tsconfig.json ./
-COPY tsconfig.base.json ../tsconfig.base.json
+COPY tsconfig.base.json ../../tsconfig.base.json
 
 # Install all dependencies (including dev for TypeScript)
-RUN npm install
+RUN npm install && ln -s /app/services/api-gateway/node_modules /app/services/node_modules
 
-# Copy source code
+# Copy source code and shared library
 COPY services/api-gateway/src ./src
+COPY services/shared ../../services/shared
 
 # Build TypeScript
 RUN npm run build
@@ -19,7 +20,7 @@ RUN npm run build
 # Production stage
 FROM node:20-alpine
 
-WORKDIR /app
+WORKDIR /app/services/api-gateway
 
 # Copy package files
 COPY services/api-gateway/package*.json ./
@@ -28,10 +29,10 @@ COPY services/api-gateway/package*.json ./
 RUN npm install --production
 
 # Copy built application from builder
-COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/services/api-gateway/dist ./dist
 
 # Expose port
 EXPOSE 3000
 
 # Start application
-CMD ["node", "dist/index.js"]
+CMD ["node", "dist/api-gateway/src/index.js"]
