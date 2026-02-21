@@ -36,7 +36,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(http_server_duration_milliseconds_count{job=~\"api-gateway|user-service|order-service|notification-service\"}[1m])) by (job)",
+          "expr": "sum(rate(http_server_duration_count{job=~\"api-gateway|user-service|order-service|notification-service\"}[1m])) by (job)",
           "legendFormat": "{{job}}",
           "refId": "A"
         }
@@ -61,7 +61,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(http_server_duration_milliseconds_count{http_status_code=~\"5..\",job=~\"api-gateway|user-service|order-service|notification-service\"}[1m])) by (job) / sum(rate(http_server_duration_milliseconds_count{job=~\"api-gateway|user-service|order-service|notification-service\"}[1m])) by (job)",
+          "expr": "sum(rate(http_server_duration_count{http_status_code=~\"5..\",job=~\"api-gateway|user-service|order-service|notification-service\"}[1m])) by (job) / sum(rate(http_server_duration_count{job=~\"api-gateway|user-service|order-service|notification-service\"}[1m])) by (job)",
           "legendFormat": "{{job}}",
           "refId": "A"
         }
@@ -84,19 +84,19 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.50, sum(rate(http_server_duration_milliseconds_bucket{job=~\"api-gateway|user-service|order-service|notification-service\"}[5m])) by (job, le))",
+          "expr": "histogram_quantile(0.50, sum(rate(http_server_duration_bucket{job=~\"api-gateway|user-service|order-service|notification-service\"}[5m])) by (job, le))",
           "legendFormat": "p50 - {{job}}",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.95, sum(rate(http_server_duration_milliseconds_bucket{job=~\"api-gateway|user-service|order-service|notification-service\"}[5m])) by (job, le))",
+          "expr": "histogram_quantile(0.95, sum(rate(http_server_duration_bucket{job=~\"api-gateway|user-service|order-service|notification-service\"}[5m])) by (job, le))",
           "legendFormat": "p95 - {{job}}",
           "refId": "B"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.99, sum(rate(http_server_duration_milliseconds_bucket{job=~\"api-gateway|user-service|order-service|notification-service\"}[5m])) by (job, le))",
+          "expr": "histogram_quantile(0.99, sum(rate(http_server_duration_bucket{job=~\"api-gateway|user-service|order-service|notification-service\"}[5m])) by (job, le))",
           "legendFormat": "p99 - {{job}}",
           "refId": "C"
         }
