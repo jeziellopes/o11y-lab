@@ -4,7 +4,10 @@ import {
   ReceiveMessageCommand,
   DeleteMessageCommand,
 } from '@aws-sdk/client-sqs';
-import { IQueueTransport, QueueMessage } from './IQueueTransport';
+import { IQueueTransport, QueueMessage, safeParseMessage } from './IQueueTransport';
+import { createLogger } from '../logger';
+
+const logger = createLogger('sqs-transport');
 
 /**
  * SQS transport for AWS production deployments.
@@ -30,7 +33,7 @@ export class SQSTransport implements IQueueTransport {
       throw new Error('[SQSTransport] SQS_QUEUE_URL environment variable is required');
     }
 
-    console.log(`[SQSTransport] queue: ${this.queueUrl}`);
+    logger.info('SQS transport initialized', { queueUrl: this.queueUrl });
   }
 
   async publish(message: QueueMessage): Promise<void> {
@@ -44,7 +47,7 @@ export class SQSTransport implements IQueueTransport {
 
   async consume(handler: (message: QueueMessage) => Promise<void>): Promise<void> {
     this.running = true;
-    console.log('[SQSTransport] starting consumer...');
+    logger.info('Starting SQS consumer', { queueUrl: this.queueUrl });
 
     while (this.running) {
       try {
@@ -58,7 +61,18 @@ export class SQSTransport implements IQueueTransport {
 
         for (const sqsMessage of response.Messages || []) {
           try {
-            const message: QueueMessage = JSON.parse(sqsMessage.Body!);
+            const message = safeParseMessage(sqsMessage.Body!);
+            if (!message) {
+              logger.warn('Discarding malformed SQS message', { body: sqsMessage.Body?.slice(0, 200) });
+              // Delete the unprocessable message so it doesn't block the queue
+              await this.client.send(
+                new DeleteMessageCommand({
+                  QueueUrl: this.queueUrl,
+                  ReceiptHandle: sqsMessage.ReceiptHandle!,
+                })
+              );
+              continue;
+            }
             await handler(message);
 
             await this.client.send(
@@ -68,12 +82,12 @@ export class SQSTransport implements IQueueTransport {
               })
             );
           } catch (err) {
-            console.error('[SQSTransport] failed to process message:', err);
+            logger.error('Failed to process SQS message', { error: (err as Error).message });
             // Message stays in queue and becomes visible again after visibility timeout
           }
         }
       } catch (err) {
-        console.error('[SQSTransport] receive error:', err);
+        logger.error('SQS receive error', { error: (err as Error).message });
         await new Promise((r) => setTimeout(r, 2000));
       }
     }

@@ -2,7 +2,7 @@ import { IQueueTransport } from './IQueueTransport';
 import { RedisTransport } from './RedisTransport';
 import { SQSTransport } from './SQSTransport';
 
-export { IQueueTransport, QueueMessage, injectTraceContext } from './IQueueTransport';
+export { IQueueTransport, QueueMessage, injectTraceContext, safeParseMessage } from './IQueueTransport';
 export { RedisTransport } from './RedisTransport';
 export { SQSTransport } from './SQSTransport';
 
