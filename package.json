@@ -11,7 +11,9 @@
     "dev:build": "docker-compose up --build",
     "down": "docker-compose down",
     "clean": "docker-compose down -v",
-    "logs": "docker-compose logs -f"
+    "logs": "docker-compose logs -f",
+    "test": "jest",
+    "test:coverage": "jest --coverage"
   },
   "devDependencies": {
     "@types/jest": "^29.5.12",
