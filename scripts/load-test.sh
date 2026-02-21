@@ -392,7 +392,7 @@ echo "╔═══════════════════════�
 echo "║         Observability Load Test — Demo Mode              ║"
 echo "╠══════════════════════════════════════════════════════════╣"
 printf "║  Target   : %-44s ║\n" "$GATEWAY"
-printf "║  Duration : %-3d minutes (%d seconds)%18s ║\n" "$DURATION_MINUTES" "$DURATION_SECONDS" ""
+printf "║  Duration : %2d minutes (%5d seconds)%18s ║\n" "$DURATION_MINUTES" "$DURATION_SECONDS" ""
 if $DO_CLEAN; then
 printf "║  Cleanup  : %-44s ║\n" "YES — stack will be restarted"
 else
@@ -406,8 +406,8 @@ echo "╚═══════════════════════�
 echo -e "${RESET}"
 
 # --- Optional start delay ---------------------------------------------------
-log_info "Waiting 3 seconds before starting test..."
-sleep 3
+log_info "Waiting 5 seconds before starting test..."
+sleep 5
 
 # Optionally clean the stack before the test run
 $DO_CLEAN && do_cleanup
