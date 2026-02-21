@@ -48,7 +48,6 @@ const ordersErrors = meter.createCounter('orders_errors_total', {
 const orderValue = meter.createHistogram('order_value', {
   description: 'Distribution of order values in USD',
   unit: 'USD',
-  boundaries: [10, 25, 50, 100, 250, 500, 1000],
 });
 
 interface Order {

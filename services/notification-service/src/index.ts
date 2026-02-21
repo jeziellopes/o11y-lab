@@ -47,7 +47,6 @@ const notificationsFailed = meter.createCounter('notifications_failed_total', {
 const processingDuration = meter.createHistogram('notification_processing_duration_ms', {
   description: 'Time taken to process and send a notification',
   unit: 'ms',
-  boundaries: [10, 25, 50, 100, 250, 500, 1000],
 });
 
 type Notification = QueueMessage;
