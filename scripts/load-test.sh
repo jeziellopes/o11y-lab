@@ -4,19 +4,36 @@
 # Generates sustained traffic with error scenarios for Grafana dashboard demos
 #
 # Usage:
-#   ./scripts/load-test.sh [DURATION_MINUTES]
+#   ./scripts/load-test.sh [OPTIONS] [DURATION_MINUTES]
+#
+# Options:
+#   --clean    Restart services + observability stack before the test so
+#              Prometheus, Jaeger and in-memory stores all start fresh.
+#              Ideal before recording a demo screencast.
 #
 # Examples:
-#   ./scripts/load-test.sh          # runs for 10 minutes (default)
-#   ./scripts/load-test.sh 30       # runs for 30 minutes
-#   ./scripts/load-test.sh 60       # runs for 1 hour
+#   ./scripts/load-test.sh                  # 10 min, no cleanup
+#   ./scripts/load-test.sh 30               # 30 min, no cleanup
+#   ./scripts/load-test.sh --clean          # 10 min, clean start
+#   ./scripts/load-test.sh --clean 30       # 30 min, clean start
 # =============================================================================
 
 set -euo pipefail
 
+# --- Argument parsing -------------------------------------------------------
+DO_CLEAN=false
+DURATION_MINUTES=10
+
+for arg in "$@"; do
+  case "$arg" in
+    --clean) DO_CLEAN=true ;;
+    [0-9]*)  DURATION_MINUTES="$arg" ;;
+    *) echo "Unknown argument: $arg" >&2; exit 1 ;;
+  esac
+done
+
 # --- Config ------------------------------------------------------------------
 GATEWAY="http://localhost:3000"
-DURATION_MINUTES="${1:-10}"
 DURATION_SECONDS=$((DURATION_MINUTES * 60))
 
 # Request intervals (seconds between batches in each phase)
@@ -41,6 +58,27 @@ echo 0 > "$TMPDIR_STATS/err"
 echo 0 > "$TMPDIR_STATS/total"
 
 START_TIME=$(date +%s)
+
+# --- Cleanup -----------------------------------------------------------------
+
+do_cleanup() {
+  log_phase "Pre-test Cleanup"
+
+  log_info "Restarting microservices (clears in-memory state)..."
+  docker compose restart api-gateway user-service order-service notification-service redis \
+    2>&1 | sed 's/^/  /'
+
+  log_info "Restarting Prometheus (clears metric history)..."
+  docker compose restart prometheus 2>&1 | sed 's/^/  /'
+
+  log_info "Restarting Jaeger (clears trace history)..."
+  docker compose restart jaeger 2>&1 | sed 's/^/  /'
+
+  log_info "Waiting 10s for services to stabilise after restart..."
+  sleep 10
+
+  log_ok "Cleanup complete — all stores and metrics reset."
+}
 
 # --- Helpers -----------------------------------------------------------------
 
@@ -355,12 +393,20 @@ echo "║         Observability Load Test — Demo Mode              ║"
 echo "╠══════════════════════════════════════════════════════════╣"
 printf "║  Target   : %-44s ║\n" "$GATEWAY"
 printf "║  Duration : %-3d minutes (%d seconds)%18s ║\n" "$DURATION_MINUTES" "$DURATION_SECONDS" ""
+if $DO_CLEAN; then
+printf "║  Cleanup  : %-44s ║\n" "YES — stack will be restarted"
+else
+printf "║  Cleanup  : %-44s ║\n" "no"
+fi
 echo "╠══════════════════════════════════════════════════════════╣"
 echo "║  Grafana  : http://localhost:3100                        ║"
 echo "║  Jaeger   : http://localhost:16686                       ║"
 echo "║  Prometheus: http://localhost:9090                       ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo -e "${RESET}"
+
+# Optionally clean the stack before the test run
+$DO_CLEAN && do_cleanup
 
 # Wait for API Gateway to be available
 log_info "Waiting for API Gateway to be ready..."
