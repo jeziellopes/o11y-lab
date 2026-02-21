@@ -15,7 +15,6 @@ jest.mock('winston', () => ({
 }));
 
 import { createLogger } from '../index';
-import { describe, beforeEach, it } from 'node:test';
 
 describe('createLogger', () => {
   beforeEach(() => {
