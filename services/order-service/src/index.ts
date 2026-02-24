@@ -153,10 +153,11 @@ app.post('/orders', async (req: Request, res: Response) => {
   const { userId, items, total } = req.body;
   
   // Validation
-  if (!userId || !items || !total) {
+  if (!userId || !items || !total || typeof total !== 'number') {
     span.setStatus({ code: SpanStatusCode.ERROR, message: 'Missing required fields' });
     span.setAttribute('error', true);
     span.end();
+    ordersErrors.add(1, { reason: 'validation_error' });
     return res.status(400).json({ error: 'userId, items, and total are required' });
   }
   
@@ -215,7 +216,7 @@ app.post('/orders', async (req: Request, res: Response) => {
     span.setStatus({ code: SpanStatusCode.ERROR, message: errorMessage });
     span.recordException(error instanceof Error ? error : new Error(String(error)));
     span.end();
-    ordersErrors.add(1);
+    ordersErrors.add(1, { reason: 'internal_error' });
     
     logger.error('Error creating order', { error: errorMessage });
     
