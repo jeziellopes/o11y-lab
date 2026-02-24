@@ -120,6 +120,25 @@ stats_line() {
     "$((remaining_s / 60))" "$((remaining_s % 60))"
 }
 
+# ─── Box-drawing helpers ───────────────────────────────────────────────────
+# Change BOX_WIDTH to resize every box in the script at once.
+BOX_WIDTH=80
+BOX_INNER=$(( BOX_WIDTH - 2 ))        # chars between the two border columns
+BOX_CONTENT=$(( BOX_INNER - 2 ))      # text area (1-space padding on each side)
+
+_box_rule() { printf '%*s' $BOX_INNER '' | tr ' ' '═'; }
+box_top()    { printf '╔%s╗\n' "$(_box_rule)"; }
+box_sep()    { printf '╠%s╣\n' "$(_box_rule)"; }
+box_bot()    { printf '╚%s╝\n' "$(_box_rule)"; }
+box_row()    { printf "║ %-${BOX_CONTENT}s ║\n" "$*"; }
+box_center() {
+  local text="$*" len pad_l pad_r
+  len=${#text}
+  pad_l=$(( (BOX_INNER - len) / 2 ))
+  pad_r=$(( BOX_INNER - len - pad_l ))
+  printf '║%*s%s%*s║\n' "$pad_l" '' "$text" "$pad_r" ''
+}
+
 # Cleanup on exit
 cleanup() {
   echo -e "\n${YELLOW}Interrupted — final stats:${RESET}"
@@ -388,21 +407,21 @@ phase_recovery() {
 # --- Main --------------------------------------------------------------------
 
 echo -e "${BOLD}${BLUE}"
-echo "╔══════════════════════════════════════════════════════════╗"
-echo "║         Observability Load Test — Demo Mode              ║"
-echo "╠══════════════════════════════════════════════════════════╣"
-printf "║  Target   : %-44s ║\n" "$GATEWAY"
-printf "║  Duration : %2d minutes (%5d seconds)%18s ║\n" "$DURATION_MINUTES" "$DURATION_SECONDS" ""
+box_top
+box_center "Observability Load Test — Demo Mode"
+box_sep
+box_row "Target   : $GATEWAY"
+box_row "$(printf 'Duration : %2d minutes (%5d seconds)' "$DURATION_MINUTES" "$DURATION_SECONDS")"
 if $DO_CLEAN; then
-printf "║  Cleanup  : %-44s ║\n" "YES — stack will be restarted"
+  box_row "Cleanup  : YES — stack will be restarted"
 else
-printf "║  Cleanup  : %-44s ║\n" "no"
+  box_row "Cleanup  : no"
 fi
-echo "╠══════════════════════════════════════════════════════════╣"
-echo "║  Grafana  : http://localhost:3100                        ║"
-echo "║  Jaeger   : http://localhost:16686                       ║"
-echo "║  Prometheus: http://localhost:9090                       ║"
-echo "╚══════════════════════════════════════════════════════════╝"
+box_sep
+box_row "Grafana   : http://localhost:3100"
+box_row "Jaeger    : http://localhost:16686"
+box_row "Prometheus: http://localhost:9090"
+box_bot
 echo -e "${RESET}"
 
 # --- Optional start delay ---------------------------------------------------
@@ -447,9 +466,9 @@ done
 
 # ── Final Summary ──────────────────────────────────────────────────────────
 echo -e "\n${BOLD}${GREEN}"
-echo "╔══════════════════════════════════════════════════════════╗"
-echo "║                  Load Test Complete!                     ║"
-echo "╚══════════════════════════════════════════════════════════╝"
+box_top
+box_center "Load Test Complete!"
+box_bot
 echo -e "${RESET}"
 stats_line
 echo ""
