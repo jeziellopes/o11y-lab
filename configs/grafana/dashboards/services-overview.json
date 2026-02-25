@@ -340,6 +340,151 @@
       ],
       "title": "Latency p95 per Route",
       "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 48 },
+      "id": 16,
+      "title": "SLO / Error Budget (target: 99.5 % availability)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red",    "value": null },
+              { "color": "orange", "value": 0.99 },
+              { "color": "green",  "value": 0.995 }
+            ]
+          },
+          "unit": "percentunit",
+          "min": 0.98,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 49 },
+      "id": 17,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "text": {}
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "1 - (\n  sum(rate(http_server_duration_count{http_status_code=~\"5..\",job=~\"api-gateway|user-service|order-service|notification-service\"}[5m])) by (job)\n  /\n  sum(rate(http_server_duration_count{job=~\"api-gateway|user-service|order-service|notification-service\"}[5m])) by (job)\n)",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Availability % per Service (5 min window)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red",    "value": null },
+              { "color": "orange", "value": 0 },
+              { "color": "green",  "value": 0.5 }
+            ]
+          },
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 49 },
+      "id": 18,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "text": {}
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "clamp_min(\n  1 - (\n    sum(increase(http_server_duration_count{http_status_code=~\"5..\",job=~\"api-gateway|user-service|order-service|notification-service\"}[30d])) by (job)\n    / (sum(increase(http_server_duration_count{job=~\"api-gateway|user-service|order-service|notification-service\"}[30d])) by (job) * 0.005)\n  ),\n  0\n)",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Error Budget Remaining (30-day rolling, SLO 99.5 %)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2 },
+          "unit": "short",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 55 },
+      "id": 19,
+      "options": {
+        "legend": { "calcs": ["mean", "last"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "(\n  sum(rate(http_server_duration_bucket{le=\"200\",job=~\"api-gateway|user-service|order-service|notification-service\"}[5m])) by (job)\n  + sum(rate(http_server_duration_bucket{le=\"1000\",job=~\"api-gateway|user-service|order-service|notification-service\"}[5m])) by (job)\n) / 2\n/ sum(rate(http_server_duration_count{job=~\"api-gateway|user-service|order-service|notification-service\"}[5m])) by (job)",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Apdex Score per Service (satisfied < 200 ms, tolerated < 1 s)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2 },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 55 },
+      "id": 20,
+      "options": {
+        "legend": { "calcs": ["mean", "last"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "(\n  sum(rate(http_server_duration_count{http_status_code=~\"5..\",job=~\"api-gateway|user-service|order-service|notification-service\"}[1h])) by (job)\n  / sum(rate(http_server_duration_count{job=~\"api-gateway|user-service|order-service|notification-service\"}[1h])) by (job)\n) / (0.005 / (30 * 24))",
+          "legendFormat": "fast burn 1h — {{job}}",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "(\n  sum(rate(http_server_duration_count{http_status_code=~\"5..\",job=~\"api-gateway|user-service|order-service|notification-service\"}[6h])) by (job)\n  / sum(rate(http_server_duration_count{job=~\"api-gateway|user-service|order-service|notification-service\"}[6h])) by (job)\n) / (0.005 / (30 * 24))",
+          "legendFormat": "slow burn 6h — {{job}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Error Budget Burn Rate (1h fast / 6h slow — alert threshold: 14x)",
+      "type": "timeseries"
     }
   ],
   "refresh": "10s",
@@ -351,5 +496,5 @@
   "timezone": "browser",
   "title": "Observability Demo - Services",
   "uid": "observability-services",
-  "version": 2
+  "version": 3
 }
