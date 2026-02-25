@@ -59,6 +59,19 @@ const queueConsumerLag = meter.createObservableGauge('queue_consumer_lag', {
 queueConsumerLag.addCallback((result) => {
   result.observe(cachedQueueDepth);
 });
+const heapUsedGauge = meter.createObservableGauge('nodejs_heap_used_bytes', {
+  description: 'Node.js V8 heap used bytes',
+  unit: 'By',
+});
+const heapTotalGauge = meter.createObservableGauge('nodejs_heap_total_bytes', {
+  description: 'Node.js V8 heap total bytes',
+  unit: 'By',
+});
+meter.addBatchObservableCallback((obs) => {
+  const mem = process.memoryUsage();
+  obs.observe(heapUsedGauge, mem.heapUsed);
+  obs.observe(heapTotalGauge, mem.heapTotal);
+}, [heapUsedGauge, heapTotalGauge]);
 
 type Notification = QueueMessage;
 

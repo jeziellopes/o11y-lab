@@ -465,12 +465,12 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "(\n  sum(rate(http_server_duration_bucket{le=\"200\",job=~\"api-gateway|user-service|order-service|notification-service\"}[5m])) by (job)\n  + sum(rate(http_server_duration_bucket{le=\"1000\",job=~\"api-gateway|user-service|order-service|notification-service\"}[5m])) by (job)\n) / 2\n/ sum(rate(http_server_duration_count{job=~\"api-gateway|user-service|order-service|notification-service\"}[5m])) by (job)",
+          "expr": "(\n  sum(rate(http_server_duration_bucket{le=\"250.0\",job=~\"api-gateway|user-service|order-service|notification-service\"}[5m])) by (job)\n  + sum(rate(http_server_duration_bucket{le=\"1000.0\",job=~\"api-gateway|user-service|order-service|notification-service\"}[5m])) by (job)\n) / 2\n/ sum(rate(http_server_duration_count{job=~\"api-gateway|user-service|order-service|notification-service\"}[5m])) by (job)",
           "legendFormat": "{{job}}",
           "refId": "A"
         }
       ],
-      "title": "Apdex Score per Service (satisfied < 200 ms, tolerated < 1 s)",
+      "title": "Apdex Score per Service (satisfied < 250 ms, tolerated < 1 s)",
       "type": "timeseries"
     },
     {
@@ -542,7 +542,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "nodejs_heap_size_used_bytes{job=~\"api-gateway|user-service|order-service|notification-service\"} / nodejs_heap_size_total_bytes{job=~\"api-gateway|user-service|order-service|notification-service\"}",
+          "expr": "nodejs_heap_used_bytes{job=~\"api-gateway|user-service|order-service|notification-service\"} / nodejs_heap_total_bytes{job=~\"api-gateway|user-service|order-service|notification-service\"}",
           "legendFormat": "{{job}}",
           "refId": "A"
         }
@@ -556,13 +556,13 @@
         "defaults": {
           "color": { "mode": "palette-classic" },
           "custom": { "lineWidth": 2 },
-          "unit": "ms",
+          "unit": "percent",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               { "color": "green",  "value": null },
               { "color": "orange", "value": 50 },
-              { "color": "red",    "value": 100 }
+              { "color": "red",    "value": 80 }
             ]
           }
         },
@@ -577,12 +577,12 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.99, sum(rate(nodejs_eventloop_lag_seconds_bucket{job=~\"api-gateway|user-service|order-service|notification-service\"}[1m])) by (job, le)) * 1000",
+          "expr": "nodejs_event_loop_utilization{job=~\"api-gateway|user-service|order-service|notification-service\"} * 100",
           "legendFormat": "{{job}}",
           "refId": "A"
         }
       ],
-      "title": "Event Loop Lag p99 (ms) — alert > 100 ms",
+      "title": "Event Loop Utilization % per Service",
       "type": "timeseries"
     },
     {
@@ -604,12 +604,12 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "nodejs_active_connections_total{job=~\"api-gateway|user-service|order-service|notification-service\"}",
+          "expr": "http_server_active_requests{job=~\"api-gateway|user-service|order-service|notification-service\"}",
           "legendFormat": "{{job}}",
           "refId": "A"
         }
       ],
-      "title": "Active HTTP Connections per Service",
+      "title": "Active HTTP Requests per Service",
       "type": "timeseries"
     },
     {
@@ -618,7 +618,7 @@
         "defaults": {
           "color": { "mode": "palette-classic" },
           "custom": { "lineWidth": 2 },
-          "unit": "s"
+          "unit": "decbytes"
         },
         "overrides": []
       },
@@ -631,12 +631,12 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(nodejs_gc_duration_seconds_sum{job=~\"api-gateway|user-service|order-service|notification-service\"}[1m])) by (job, kind)",
-          "legendFormat": "{{job}} — {{kind}}",
+          "expr": "nodejs_heap_used_bytes{job=~\"api-gateway|user-service|order-service|notification-service\"}",
+          "legendFormat": "{{job}}",
           "refId": "A"
         }
       ],
-      "title": "GC Pause Duration per Type (s/s)",
+      "title": "Heap Used Memory (MB) per Service",
       "type": "timeseries"
     },
     {
