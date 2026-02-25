@@ -57,6 +57,9 @@ const queuePublishDuration = meter.createHistogram('queue_publish_duration_ms', 
   description: 'Time taken to publish a message to the queue',
   unit: 'ms',
 });
+const ordersByStatus = meter.createCounter('orders_by_status_total', {
+  description: 'Orders counted by their lifecycle status transition',
+});
 
 interface Order {
   id: number;
@@ -194,6 +197,7 @@ app.post('/orders', async (req: Request, res: Response) => {
     
     orders.set(newOrder.id, newOrder);
     ordersCreated.add(1, { status: 'success' });
+    ordersByStatus.add(1, { status: 'pending' });
     orderValue.record(total);
     
     span.setAttribute('order.id', newOrder.id);
@@ -264,7 +268,8 @@ app.patch('/orders/:id/status', (req: Request, res: Response) => {
   
   order.status = status;
   order.updatedAt = new Date();
-  
+  ordersByStatus.add(1, { status });
+
   span.addEvent('Order status updated');
   span.end();
   
