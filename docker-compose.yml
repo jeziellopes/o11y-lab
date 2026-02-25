@@ -179,6 +179,26 @@ services:
       timeout: 3s
       retries: 3
 
+  # 24/7 low-traffic background simulator
+  # Generates a realistic heartbeat so dashboards always have data.
+  # Set TICK_SLEEP to tune request cadence (default: 10 s between ticks).
+  traffic-simulator:
+    image: alpine:3.19
+    container_name: traffic-simulator
+    restart: unless-stopped
+    entrypoint: ["sh", "/scripts/traffic-simulator.sh"]
+    environment:
+      - GATEWAY_URL=http://api-gateway:3000
+      - TICK_SLEEP=10
+    volumes:
+      - ./scripts/traffic-simulator.sh:/scripts/traffic-simulator.sh:ro
+    depends_on:
+      - api-gateway
+      - user-service
+      - order-service
+    networks:
+      - observability-net
+
 networks:
   observability-net:
     driver: bridge
