@@ -49,6 +49,16 @@ const processingDuration = meter.createHistogram('notification_processing_durati
   description: 'Time taken to process and send a notification',
   unit: 'ms',
 });
+const queueProcessed = meter.createCounter('queue_messages_processed_total', {
+  description: 'Queue messages processed by notification-service, labelled by status',
+});
+let cachedQueueDepth = 0;
+const queueConsumerLag = meter.createObservableGauge('queue_consumer_lag', {
+  description: 'Number of messages currently waiting in the queue',
+});
+queueConsumerLag.addCallback((result) => {
+  result.observe(cachedQueueDepth);
+});
 
 type Notification = QueueMessage;
 
@@ -65,6 +75,10 @@ createQueueTransport().then((t: IQueueTransport) => {
   queue.consume(processNotification).catch((err: unknown) =>
     console.error('Queue consumer error:', err)
   );
+  // Poll queue depth every 15 s to feed the consumer lag gauge
+  setInterval(async () => {
+    try { cachedQueueDepth = await queue!.getDepth(); } catch { /* ignore */ }
+  }, 15_000);
 }).catch((err: unknown) => console.error('Failed to initialize queue transport:', err));
 
 async function processNotification(notification: Notification) {
@@ -99,12 +113,14 @@ async function processNotification(notification: Notification) {
       const durationMs = Date.now() - startTime;
       processingDuration.record(durationMs, { type: notification.type });
       notificationsSent.add(1, { type: notification.type });
+      queueProcessed.add(1, { status: 'success' });
       
       span.addEvent('Notification processed successfully');
       span.end();
     });
   } catch (error) {
     notificationsFailed.add(1);
+    queueProcessed.add(1, { status: 'failed' });
     logger.error('Error processing notification', { error: (error as Error).message });
     const span = tracer.startSpan('process-notification-error');
     span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });

@@ -50,6 +50,13 @@ const orderValue = meter.createHistogram('order_value', {
   description: 'Distribution of order values in USD',
   unit: 'USD',
 });
+const queuePublished = meter.createCounter('queue_messages_published_total', {
+  description: 'Total messages published to the queue by order-service',
+});
+const queuePublishDuration = meter.createHistogram('queue_publish_duration_ms', {
+  description: 'Time taken to publish a message to the queue',
+  unit: 'ms',
+});
 
 interface Order {
   id: number;
@@ -205,7 +212,10 @@ app.post('/orders', async (req: Request, res: Response) => {
         timestamp: new Date().toISOString(),
       });
 
+      const publishStart = Date.now();
       await queue.publish(notification);
+      queuePublishDuration.record(Date.now() - publishStart);
+      queuePublished.add(1);
       span.addEvent('Notification published to queue');
     }
     

@@ -22,6 +22,8 @@ export interface QueueMessage {
 export interface IQueueTransport {
   publish(message: QueueMessage): Promise<void>;
   consume(handler: (message: QueueMessage) => Promise<void>): Promise<void>;
+  /** Returns the number of messages currently waiting in the queue. */
+  getDepth(): Promise<number>;
   close(): Promise<void>;
 }
 
