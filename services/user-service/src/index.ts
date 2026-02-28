@@ -7,6 +7,7 @@
 // Initialize OpenTelemetry BEFORE importing other modules
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
+import { RuntimeNodeInstrumentation } from '@opentelemetry/instrumentation-runtime-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { PrometheusExporter } from '@opentelemetry/exporter-prometheus';
 import { Resource } from '@opentelemetry/resources';
@@ -23,7 +24,7 @@ const sdk = new NodeSDK({
     url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://jaeger:4318/v1/traces',
   }),
   metricReader: prometheusExporter,
-  instrumentations: [getNodeAutoInstrumentations()],
+  instrumentations: [getNodeAutoInstrumentations(), new RuntimeNodeInstrumentation()],
 });
 
 sdk.start();
@@ -43,6 +44,19 @@ const usersCreated = meter.createCounter('users_created_total', {
 const userErrors = meter.createCounter('users_errors_total', {
   description: 'Total number of user operation errors',
 });
+const heapUsedGauge = meter.createObservableGauge('nodejs_heap_used_bytes', {
+  description: 'Node.js V8 heap used bytes',
+  unit: 'By',
+});
+const heapTotalGauge = meter.createObservableGauge('nodejs_heap_total_bytes', {
+  description: 'Node.js V8 heap total bytes',
+  unit: 'By',
+});
+meter.addBatchObservableCallback((obs) => {
+  const mem = process.memoryUsage();
+  obs.observe(heapUsedGauge, mem.heapUsed);
+  obs.observe(heapTotalGauge, mem.heapTotal);
+}, [heapUsedGauge, heapTotalGauge]);
 
 interface User {
   id: number;

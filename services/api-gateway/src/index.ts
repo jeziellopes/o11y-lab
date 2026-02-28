@@ -7,6 +7,7 @@
 // Initialize OpenTelemetry BEFORE importing other modules
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
+import { RuntimeNodeInstrumentation } from '@opentelemetry/instrumentation-runtime-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { PrometheusExporter } from '@opentelemetry/exporter-prometheus';
 import { Resource } from '@opentelemetry/resources';
@@ -24,7 +25,7 @@ const sdk = new NodeSDK({
     url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://jaeger:4318/v1/traces',
   }),
   metricReader: prometheusExporter,
-  instrumentations: [getNodeAutoInstrumentations()],
+  instrumentations: [getNodeAutoInstrumentations(), new RuntimeNodeInstrumentation()],
 });
 
 sdk.start();
@@ -45,6 +46,19 @@ const requestCounter = meter.createCounter('gateway_requests_total', {
 const errorCounter = meter.createCounter('gateway_errors_total', {
   description: 'Total upstream errors encountered by the API Gateway',
 });
+const heapUsedGauge = meter.createObservableGauge('nodejs_heap_used_bytes', {
+  description: 'Node.js V8 heap used bytes',
+  unit: 'By',
+});
+const heapTotalGauge = meter.createObservableGauge('nodejs_heap_total_bytes', {
+  description: 'Node.js V8 heap total bytes',
+  unit: 'By',
+});
+meter.addBatchObservableCallback((obs) => {
+  const mem = process.memoryUsage();
+  obs.observe(heapUsedGauge, mem.heapUsed);
+  obs.observe(heapTotalGauge, mem.heapTotal);
+}, [heapUsedGauge, heapTotalGauge]);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -167,7 +181,10 @@ app.post('/api/orders', async (req: Request, res: Response) => {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     errorCounter.add(1, { endpoint: 'POST /api/orders' });
     logger.error('Error calling order service', { error: errorMessage });
-    res.status(500).json({ error: 'Failed to create order' });
+    const axiosError = error as any;
+    res.status(axiosError.response?.status || 500).json({
+      error: axiosError.response?.data?.error || 'Failed to create order',
+    });
   }
 });
 

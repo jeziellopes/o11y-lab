@@ -7,6 +7,7 @@
 // Initialize OpenTelemetry BEFORE importing other modules
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
+import { RuntimeNodeInstrumentation } from '@opentelemetry/instrumentation-runtime-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { PrometheusExporter } from '@opentelemetry/exporter-prometheus';
 import { Resource } from '@opentelemetry/resources';
@@ -23,7 +24,7 @@ const sdk = new NodeSDK({
     url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://jaeger:4318/v1/traces',
   }),
   metricReader: prometheusExporter,
-  instrumentations: [getNodeAutoInstrumentations()],
+  instrumentations: [getNodeAutoInstrumentations(), new RuntimeNodeInstrumentation()],
 });
 
 sdk.start();
@@ -48,6 +49,29 @@ const processingDuration = meter.createHistogram('notification_processing_durati
   description: 'Time taken to process and send a notification',
   unit: 'ms',
 });
+const queueProcessed = meter.createCounter('queue_messages_processed_total', {
+  description: 'Queue messages processed by notification-service, labelled by status',
+});
+let cachedQueueDepth = 0;
+const queueConsumerLag = meter.createObservableGauge('queue_consumer_lag', {
+  description: 'Number of messages currently waiting in the queue',
+});
+queueConsumerLag.addCallback((result) => {
+  result.observe(cachedQueueDepth);
+});
+const heapUsedGauge = meter.createObservableGauge('nodejs_heap_used_bytes', {
+  description: 'Node.js V8 heap used bytes',
+  unit: 'By',
+});
+const heapTotalGauge = meter.createObservableGauge('nodejs_heap_total_bytes', {
+  description: 'Node.js V8 heap total bytes',
+  unit: 'By',
+});
+meter.addBatchObservableCallback((obs) => {
+  const mem = process.memoryUsage();
+  obs.observe(heapUsedGauge, mem.heapUsed);
+  obs.observe(heapTotalGauge, mem.heapTotal);
+}, [heapUsedGauge, heapTotalGauge]);
 
 type Notification = QueueMessage;
 
@@ -64,6 +88,10 @@ createQueueTransport().then((t: IQueueTransport) => {
   queue.consume(processNotification).catch((err: unknown) =>
     console.error('Queue consumer error:', err)
   );
+  // Poll queue depth every 15 s to feed the consumer lag gauge
+  setInterval(async () => {
+    try { cachedQueueDepth = await queue!.getDepth(); } catch { /* ignore */ }
+  }, 15_000);
 }).catch((err: unknown) => console.error('Failed to initialize queue transport:', err));
 
 async function processNotification(notification: Notification) {
@@ -98,12 +126,14 @@ async function processNotification(notification: Notification) {
       const durationMs = Date.now() - startTime;
       processingDuration.record(durationMs, { type: notification.type });
       notificationsSent.add(1, { type: notification.type });
+      queueProcessed.add(1, { status: 'success' });
       
       span.addEvent('Notification processed successfully');
       span.end();
     });
   } catch (error) {
     notificationsFailed.add(1);
+    queueProcessed.add(1, { status: 'failed' });
     logger.error('Error processing notification', { error: (error as Error).message });
     const span = tracer.startSpan('process-notification-error');
     span.setStatus({ code: SpanStatusCode.ERROR, message: (error as Error).message });

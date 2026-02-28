@@ -48,25 +48,43 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "palette-classic" },
           "custom": { "lineWidth": 2 },
           "unit": "percentunit",
           "max": 1,
           "min": 0
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": "/^5xx/" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byRegexp", "options": "/^4xx/" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }]
+          }
+        ]
       },
         "gridPos": { "h": 8, "w": 8, "x": 8, "y": 1 },
       "id": 3,
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "sum(rate(http_server_duration_count{http_status_code=~\"5..\",job=~\"api-gateway|user-service|order-service|notification-service\"}[1m])) by (job) / sum(rate(http_server_duration_count{job=~\"api-gateway|user-service|order-service|notification-service\"}[1m])) by (job)",
-          "legendFormat": "{{job}}",
+          "legendFormat": "5xx — {{job}}",
           "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(http_server_duration_count{http_status_code=~\"4..\",job=~\"api-gateway|user-service|order-service|notification-service\"}[1m])) by (job) / sum(rate(http_server_duration_count{job=~\"api-gateway|user-service|order-service|notification-service\"}[1m])) by (job)",
+          "legendFormat": "4xx — {{job}}",
+          "refId": "B"
         }
       ],
-      "title": "Error Rate by Service",
+      "title": "4xx vs 5xx Error Rate by Service",
       "type": "timeseries"
     },
     {
@@ -114,7 +132,7 @@
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
-        "defaults": { "color": { "mode": "thresholds" }, "unit": "short" },
+        "defaults": { "color": { "fixedColor": "green", "mode": "fixed" }, "unit": "short" },
         "overrides": []
       },
       "gridPos": { "h": 5, "w": 6, "x": 0, "y": 18 },
@@ -134,7 +152,7 @@
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
-        "defaults": { "color": { "mode": "thresholds" }, "unit": "short" },
+        "defaults": { "color": { "fixedColor": "green", "mode": "fixed" }, "unit": "short" },
         "overrides": []
       },
       "gridPos": { "h": 5, "w": 6, "x": 6, "y": 18 },
@@ -154,7 +172,7 @@
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
-        "defaults": { "color": { "mode": "thresholds" }, "unit": "short" },
+        "defaults": { "color": { "fixedColor": "green", "mode": "fixed" }, "unit": "short" },
         "overrides": []
       },
       "gridPos": { "h": 5, "w": 6, "x": 12, "y": 18 },
@@ -174,21 +192,39 @@
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
-        "defaults": { "color": { "mode": "thresholds" }, "unit": "short" },
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red",    "value": null },
+              { "color": "orange", "value": 0.95 },
+              { "color": "green",  "value": 0.99 }
+            ]
+          }
+        },
         "overrides": []
       },
       "gridPos": { "h": 5, "w": 6, "x": 18, "y": 18 },
       "id": 9,
-      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "orders_errors_total",
-          "legendFormat": "Order Errors",
+          "expr": "sum(rate(http_server_duration_count{job=\"order-service\",http_method=\"POST\",http_status_code=\"201\"}[5m]))\n/ clamp_min(\n  sum(rate(http_server_duration_count{job=\"order-service\",http_method=\"POST\",http_status_code=~\"2..|5..\"}[5m])),\n  1e-9\n)",
+          "legendFormat": "Order Success Rate",
           "refId": "A"
         }
       ],
-      "title": "Total Order Errors",
+      "title": "Order Success Rate %",
       "type": "stat"
     },
     {
@@ -248,6 +284,744 @@
       ],
       "title": "Order Value Distribution",
       "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 31 },
+      "id": 12,
+      "title": "Traffic & Error Breakdown — Per Route",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
+      "id": 13,
+      "options": {
+        "footer": { "enablePagination": true },
+        "sortBy": [{ "desc": true, "displayName": "Value" }]
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sort_desc(sum(rate(http_server_duration_count{job=~\"api-gateway|user-service|order-service|notification-service\"}[1m])) by (job, http_route))",
+          "legendFormat": "{{job}} — {{http_route}}",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "title": "Top Routes by Traffic",
+      "type": "table"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "percentunit", "min": 0, "max": 1 },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
+      "id": 14,
+      "options": {
+        "footer": { "enablePagination": true },
+        "sortBy": [{ "desc": true, "displayName": "Value" }]
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sort_desc(\n  sum(rate(http_server_duration_count{http_status_code=~\"5..\",job=~\"api-gateway|user-service|order-service|notification-service\"}[1m])) by (job, http_route)\n  /\n  sum(rate(http_server_duration_count{job=~\"api-gateway|user-service|order-service|notification-service\"}[1m])) by (job, http_route)\n)",
+          "legendFormat": "{{job}} — {{http_route}}",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "title": "Top Routes by Error Rate (5xx)",
+      "type": "table"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2 },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 40 },
+      "id": 15,
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.95, sum(rate(http_server_duration_bucket{job=~\"api-gateway|user-service|order-service|notification-service\"}[5m])) by (job, http_route, le))",
+          "legendFormat": "p95 — {{job}} {{http_route}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Latency p95 per Route",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 48 },
+      "id": 16,
+      "title": "SLO / Error Budget (target: 99.5 % availability)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red",    "value": null },
+              { "color": "orange", "value": 0.99 },
+              { "color": "green",  "value": 0.995 }
+            ]
+          },
+          "unit": "percentunit",
+          "min": 0.98,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 49 },
+      "id": 17,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "text": {}
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "1 - (\n  sum(rate(http_server_duration_count{http_status_code=~\"5..\",job=~\"api-gateway|user-service|order-service|notification-service\"}[5m])) by (job)\n  /\n  sum(rate(http_server_duration_count{job=~\"api-gateway|user-service|order-service|notification-service\"}[5m])) by (job)\n)",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Availability % per Service (5 min window)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red",    "value": null },
+              { "color": "orange", "value": 0 },
+              { "color": "green",  "value": 0.5 }
+            ]
+          },
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 49 },
+      "id": 18,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "text": {}
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "clamp_min(\n  1 - (\n    (\n      sum(rate(http_server_duration_count{http_status_code=~\"5..\",job=~\"api-gateway|user-service|order-service|notification-service\"}[1h])) by (job)\n      or\n      (sum(rate(http_server_duration_count{job=~\"api-gateway|user-service|order-service|notification-service\"}[1h])) by (job) * 0)\n    )\n    / sum(rate(http_server_duration_count{job=~\"api-gateway|user-service|order-service|notification-service\"}[1h])) by (job)\n  ) / 0.005,\n  0\n)",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Error Budget Remaining (current rate vs SLO 99.5 %)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2 },
+          "unit": "short",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 55 },
+      "id": 19,
+      "options": {
+        "legend": { "calcs": ["mean", "last"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "(\n  sum(rate(http_server_duration_bucket{le=\"250.0\",job=~\"api-gateway|user-service|order-service|notification-service\"}[5m])) by (job)\n  + sum(rate(http_server_duration_bucket{le=\"1000.0\",job=~\"api-gateway|user-service|order-service|notification-service\"}[5m])) by (job)\n) / 2\n/ sum(rate(http_server_duration_count{job=~\"api-gateway|user-service|order-service|notification-service\"}[5m])) by (job)",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Apdex Score per Service (satisfied < 250 ms, tolerated < 1 s)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2 },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 55 },
+      "id": 20,
+      "options": {
+        "legend": { "calcs": ["mean", "last"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "(\n  sum(rate(http_server_duration_count{http_status_code=~\"5..\",job=~\"api-gateway|user-service|order-service|notification-service\"}[1h])) by (job)\n  / sum(rate(http_server_duration_count{job=~\"api-gateway|user-service|order-service|notification-service\"}[1h])) by (job)\n) / (0.005 / (30 * 24))",
+          "legendFormat": "fast burn 1h — {{job}}",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "(\n  sum(rate(http_server_duration_count{http_status_code=~\"5..\",job=~\"api-gateway|user-service|order-service|notification-service\"}[6h])) by (job)\n  / sum(rate(http_server_duration_count{job=~\"api-gateway|user-service|order-service|notification-service\"}[6h])) by (job)\n) / (0.005 / (30 * 24))",
+          "legendFormat": "slow burn 6h — {{job}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Error Budget Burn Rate (1h fast / 6h slow — alert threshold: 14x)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 63 },
+      "id": 21,
+      "title": "Node.js Runtime Saturation",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2 },
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "orange", "value": 0.75 },
+              { "color": "red",    "value": 0.85 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 64 },
+      "id": 22,
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "nodejs_heap_used_bytes{job=~\"api-gateway|user-service|order-service|notification-service\"} / nodejs_heap_total_bytes{job=~\"api-gateway|user-service|order-service|notification-service\"}",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Heap Usage % per Service (alert > 85 %)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2 },
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "orange", "value": 50 },
+              { "color": "red",    "value": 80 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 64 },
+      "id": 23,
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "nodejs_event_loop_utilization{job=~\"api-gateway|user-service|order-service|notification-service\"} * 100",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Event Loop Utilization % per Service",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2 },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 72 },
+      "id": 24,
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "process_open_fds{job=~\"api-gateway|user-service|order-service|notification-service\"}",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Open File Descriptors per Service",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2 },
+          "unit": "decbytes"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 72 },
+      "id": 25,
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "nodejs_heap_used_bytes{job=~\"api-gateway|user-service|order-service|notification-service\"}",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Heap Used Memory (MB) per Service",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 80 },
+      "id": 26,
+      "title": "Queue Health (order-service → notification-service)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "orange", "value": 50 },
+              { "color": "red",    "value": 200 }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 81 },
+      "id": 27,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "queue_consumer_lag{job=\"notification-service\"}",
+          "legendFormat": "Queue Depth",
+          "refId": "A"
+        }
+      ],
+      "title": "Queue Depth (messages waiting — alert > 200)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2 },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 81 },
+      "id": 28,
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(queue_messages_processed_total{job=\"notification-service\",status=\"success\"}[1m]) * 60",
+          "legendFormat": "success / min",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(queue_messages_processed_total{job=\"notification-service\",status=\"failed\"}[1m]) * 60",
+          "legendFormat": "failed / min",
+          "refId": "B"
+        }
+      ],
+      "title": "Message Processing Rate (success vs failed)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red",    "value": 10 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 81 },
+      "id": 29,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "increase(queue_messages_processed_total{job=\"notification-service\",status=\"failed\"}[1h])",
+          "legendFormat": "Failed (last 1h)",
+          "refId": "A"
+        }
+      ],
+      "title": "Dead-letter / Failed Messages (last 1 h)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2 },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 89 },
+      "id": 30,
+      "options": {
+        "legend": { "calcs": ["mean", "p95"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.95, sum(rate(notification_processing_duration_ms_bucket{job=\"notification-service\"}[5m])) by (le))",
+          "legendFormat": "p95 processing latency",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.50, sum(rate(notification_processing_duration_ms_bucket{job=\"notification-service\"}[5m])) by (le))",
+          "legendFormat": "p50 processing latency",
+          "refId": "B"
+        }
+      ],
+      "title": "Message Processing Latency p50 / p95",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2 },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 89 },
+      "id": 31,
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.95, sum(rate(queue_publish_duration_ms_bucket{job=\"order-service\"}[5m])) by (le))",
+          "legendFormat": "p95 publish latency",
+          "refId": "A"
+        }
+      ],
+      "title": "Queue Publish Latency p95 (order-service)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 97 },
+      "id": 32,
+      "title": "Inter-service Call Latency (api-gateway → downstream)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2 },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 98 },
+      "id": 33,
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.95, sum(rate(http_client_duration_bucket{job=\"api-gateway\",net_peer_name!=\"jaeger\"}[5m])) by (net_peer_name, le))",
+          "legendFormat": "p95 — {{net_peer_name}}",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.50, sum(rate(http_client_duration_bucket{job=\"api-gateway\",net_peer_name!=\"jaeger\"}[5m])) by (net_peer_name, le))",
+          "legendFormat": "p50 — {{net_peer_name}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Downstream Call Latency p50 / p95 (from api-gateway)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2 },
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 98 },
+      "id": 34,
+      "options": {
+        "legend": { "calcs": ["mean", "last"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(http_client_duration_count{http_status_code=~\"5..\",job=\"api-gateway\",net_peer_name!=\"jaeger\"}[1m])) by (net_peer_name)\n/ sum(rate(http_client_duration_count{job=\"api-gateway\",net_peer_name!=\"jaeger\"}[1m])) by (net_peer_name)",
+          "legendFormat": "5xx — {{net_peer_name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Downstream 5xx Error Rate per Dependency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red",    "value": null },
+              { "color": "orange", "value": 0.99 },
+              { "color": "green",  "value": 0.995 }
+            ]
+          },
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 106 },
+      "id": 35,
+      "options": {
+        "colorMode": "background",
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "horizontal"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "1 - (\n  sum(rate(http_client_duration_count{http_status_code=~\"5..\",job=\"api-gateway\",net_peer_name!=\"jaeger\"}[5m])) by (net_peer_name)\n  / sum(rate(http_client_duration_count{job=\"api-gateway\",net_peer_name!=\"jaeger\"}[5m])) by (net_peer_name)\n)",
+          "legendFormat": "{{net_peer_name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Dependency Availability (from api-gateway perspective)",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 112 },
+      "id": 36,
+      "title": "Business Health Ratios",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2 },
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 113 },
+      "id": 37,
+      "options": {
+        "legend": { "calcs": ["mean", "last"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(notifications_sent_total{job=\"notification-service\"}[5m]))\n/ clamp_min(\n  sum(rate(notifications_sent_total{job=\"notification-service\"}[5m]))\n  + (sum(rate(notifications_failed_total{job=\"notification-service\"}[5m])) or vector(0)),\n  1e-9\n)",
+          "legendFormat": "notification success rate",
+          "refId": "A"
+        }
+      ],
+      "title": "Notification Delivery Success Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "stacking": { "group": "A", "mode": "normal" } },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 113 },
+      "id": 38,
+      "options": {
+        "legend": { "calcs": ["last"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(orders_by_status_total{job=\"order-service\",status=\"pending\"}[5m]) * 60",
+          "legendFormat": "pending / min",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(orders_by_status_total{job=\"order-service\",status=\"completed\"}[5m]) * 60",
+          "legendFormat": "completed / min",
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(orders_by_status_total{job=\"order-service\",status=\"failed\"}[5m]) * 60",
+          "legendFormat": "failed / min",
+          "refId": "C"
+        }
+      ],
+      "title": "Orders by Status Rate (stacked)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2 },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 121 },
+      "id": 39,
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(users_created_total{job=\"user-service\"}[5m]) * 60",
+          "legendFormat": "new users / min",
+          "refId": "A"
+        }
+      ],
+      "title": "User Registration Rate (new users / min)",
+      "type": "timeseries"
     }
   ],
   "refresh": "10s",
@@ -259,5 +1033,5 @@
   "timezone": "browser",
   "title": "Observability Demo - Services",
   "uid": "observability-services",
-  "version": 1
+  "version": 6
 }

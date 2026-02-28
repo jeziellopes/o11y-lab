@@ -1,0 +1,217 @@
+groups:
+  # ── HTTP / Traffic ────────────────────────────────────────────────────────
+  - name: http_errors
+    interval: 1m
+    rules:
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_server_duration_count{http_status_code=~"5..",job=~"api-gateway|user-service|order-service|notification-service"}[5m])) by (job)
+          /
+          sum(rate(http_server_duration_count{job=~"api-gateway|user-service|order-service|notification-service"}[5m])) by (job)
+          > 0.01
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High 5xx error rate on {{ $labels.job }}"
+          description: "{{ $labels.job }} 5xx error rate is {{ $value | humanizePercentage }} (threshold: 1%) for 5 min."
+
+      - alert: CriticalErrorRate
+        expr: |
+          sum(rate(http_server_duration_count{http_status_code=~"5..",job=~"api-gateway|user-service|order-service|notification-service"}[5m])) by (job)
+          /
+          sum(rate(http_server_duration_count{job=~"api-gateway|user-service|order-service|notification-service"}[5m])) by (job)
+          > 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "CRITICAL error rate on {{ $labels.job }}"
+          description: "{{ $labels.job }} 5xx error rate is {{ $value | humanizePercentage }} (threshold: 5%) for 2 min."
+
+  # ── SLO / Availability ────────────────────────────────────────────────────
+  - name: slo
+    interval: 1m
+    rules:
+      - alert: SLOAvailabilityBreach
+        expr: |
+          (
+            1 - (
+              sum(rate(http_server_duration_count{http_status_code=~"5..",job=~"api-gateway|user-service|order-service|notification-service"}[10m])) by (job)
+              /
+              sum(rate(http_server_duration_count{job=~"api-gateway|user-service|order-service|notification-service"}[10m])) by (job)
+            )
+          ) < 0.995
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "SLO breach: {{ $labels.job }} availability below 99.5%"
+          description: "{{ $labels.job }} availability is {{ $value | humanizePercentage }} over the last 10 min (SLO target: 99.5%)."
+
+      - alert: ErrorBudgetFastBurn
+        expr: |
+          (
+            sum(rate(http_server_duration_count{http_status_code=~"5..",job=~"api-gateway|user-service|order-service|notification-service"}[1h])) by (job)
+            /
+            sum(rate(http_server_duration_count{job=~"api-gateway|user-service|order-service|notification-service"}[1h])) by (job)
+          ) / (0.005 / (30 * 24))
+          > 14
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Fast error budget burn on {{ $labels.job }}"
+          description: "{{ $labels.job }} is burning error budget at {{ $value | humanize }}x the sustainable rate (1h window). Page-worthy."
+
+      - alert: ErrorBudgetSlowBurn
+        expr: |
+          (
+            sum(rate(http_server_duration_count{http_status_code=~"5..",job=~"api-gateway|user-service|order-service|notification-service"}[6h])) by (job)
+            /
+            sum(rate(http_server_duration_count{job=~"api-gateway|user-service|order-service|notification-service"}[6h])) by (job)
+          ) / (0.005 / (30 * 24))
+          > 6
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow error budget burn on {{ $labels.job }}"
+          description: "{{ $labels.job }} is burning error budget at {{ $value | humanize }}x the sustainable rate (6h window)."
+
+  # ── Latency ───────────────────────────────────────────────────────────────
+  - name: latency
+    interval: 1m
+    rules:
+      - alert: HighLatencyP99
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(http_server_duration_bucket{job=~"api-gateway|user-service|order-service|notification-service"}[5m])) by (job, le)
+          ) > 2000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High p99 latency on {{ $labels.job }}"
+          description: "{{ $labels.job }} p99 latency is {{ $value | humanize }}ms (threshold: 2000ms) for 5 min."
+
+      - alert: CriticalLatencyP99
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(http_server_duration_bucket{job=~"api-gateway|user-service|order-service|notification-service"}[5m])) by (job, le)
+          ) > 5000
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "CRITICAL p99 latency on {{ $labels.job }}"
+          description: "{{ $labels.job }} p99 latency is {{ $value | humanize }}ms (threshold: 5000ms) for 2 min."
+
+  # ── Node.js Runtime ───────────────────────────────────────────────────────
+  - name: nodejs_runtime
+    interval: 1m
+    rules:
+      - alert: HighEventLoopLag
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(nodejs_eventloop_lag_seconds_bucket{job=~"api-gateway|user-service|order-service|notification-service"}[1m])) by (job, le)
+          ) * 1000 > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High event loop lag on {{ $labels.job }}"
+          description: "{{ $labels.job }} event loop lag p99 is {{ $value | humanize }}ms (threshold: 100ms) for 5 min."
+
+      - alert: HighHeapUsage
+        expr: |
+          nodejs_heap_size_used_bytes{job=~"api-gateway|user-service|order-service|notification-service"}
+          /
+          nodejs_heap_size_total_bytes{job=~"api-gateway|user-service|order-service|notification-service"}
+          > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High heap usage on {{ $labels.job }}"
+          description: "{{ $labels.job }} heap usage is {{ $value | humanizePercentage }} (threshold: 85%) for 5 min."
+
+      - alert: CriticalHeapUsage
+        expr: |
+          nodejs_heap_size_used_bytes{job=~"api-gateway|user-service|order-service|notification-service"}
+          /
+          nodejs_heap_size_total_bytes{job=~"api-gateway|user-service|order-service|notification-service"}
+          > 0.95
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "CRITICAL heap usage on {{ $labels.job }}"
+          description: "{{ $labels.job }} heap usage is {{ $value | humanizePercentage }} (threshold: 95%) for 2 min. OOM imminent."
+
+  # ── Queue Health ──────────────────────────────────────────────────────────
+  - name: queue_health
+    interval: 1m
+    rules:
+      - alert: QueueDepthHigh
+        expr: queue_consumer_lag{job="notification-service"} > 50
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Queue depth elevated"
+          description: "Queue has {{ $value }} messages pending (threshold: 50) for 5 min. Consumer may be falling behind."
+
+      - alert: QueueDepthCritical
+        expr: queue_consumer_lag{job="notification-service"} > 200
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "CRITICAL queue depth"
+          description: "Queue has {{ $value }} messages pending (threshold: 200) for 5 min. Likely consumer stall."
+
+      - alert: QueueMessageFailureSpike
+        expr: |
+          rate(queue_messages_processed_total{job="notification-service",status="failed"}[5m])
+          /
+          clamp_min(rate(queue_messages_processed_total{job="notification-service"}[5m]), 1e-9)
+          > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High queue message failure rate"
+          description: "{{ $value | humanizePercentage }} of queue messages are failing (threshold: 10%) for 5 min."
+
+  # ── Business ──────────────────────────────────────────────────────────────
+  - name: business
+    interval: 1m
+    rules:
+      - alert: OrderSuccessRateLow
+        expr: |
+          1 - (
+            sum(increase(orders_errors_total[5m]))
+            / clamp_min(sum(increase(orders_created_total[5m])) + sum(increase(orders_errors_total[5m])), 1)
+          ) < 0.95
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Order success rate below 95%"
+          description: "Order success rate is {{ $value | humanizePercentage }} (threshold: 95%) for 5 min."
+
+      - alert: NotificationFailureRateHigh
+        expr: |
+          rate(notifications_failed_total{job="notification-service"}[5m])
+          /
+          clamp_min(
+            rate(notifications_sent_total{job="notification-service"}[5m]) + rate(notifications_failed_total{job="notification-service"}[5m]),
+            1e-9
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Notification failure rate above 5%"
+          description: "Notification failure rate is {{ $value | humanizePercentage }} (threshold: 5%) for 5 min."

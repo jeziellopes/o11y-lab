@@ -3,6 +3,7 @@ import {
   SendMessageCommand,
   ReceiveMessageCommand,
   DeleteMessageCommand,
+  GetQueueAttributesCommand,
 } from '@aws-sdk/client-sqs';
 import { IQueueTransport, QueueMessage, safeParseMessage } from './IQueueTransport';
 import { createLogger } from '../logger';
@@ -91,6 +92,16 @@ export class SQSTransport implements IQueueTransport {
         await new Promise((r) => setTimeout(r, 2000));
       }
     }
+  }
+
+  async getDepth(): Promise<number> {
+    const response = await this.client.send(
+      new GetQueueAttributesCommand({
+        QueueUrl: this.queueUrl,
+        AttributeNames: ['ApproximateNumberOfMessages'],
+      })
+    );
+    return parseInt(response.Attributes?.ApproximateNumberOfMessages ?? '0', 10);
   }
 
   async close(): Promise<void> {

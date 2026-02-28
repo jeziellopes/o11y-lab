@@ -26,6 +26,10 @@ export class RedisTransport implements IQueueTransport {
     await this.client.lPush(QUEUE_NAME, JSON.stringify(message));
   }
 
+  async getDepth(): Promise<number> {
+    return this.client.lLen(QUEUE_NAME);
+  }
+
   async consume(handler: (message: QueueMessage) => Promise<void>): Promise<void> {
     this.running = true;
     logger.info('Starting Redis consumer', { queue: QUEUE_NAME });

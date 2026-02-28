@@ -7,6 +7,7 @@
 // Initialize OpenTelemetry BEFORE importing other modules
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
+import { RuntimeNodeInstrumentation } from '@opentelemetry/instrumentation-runtime-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { PrometheusExporter } from '@opentelemetry/exporter-prometheus';
 import { Resource } from '@opentelemetry/resources';
@@ -23,7 +24,7 @@ const sdk = new NodeSDK({
     url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://jaeger:4318/v1/traces',
   }),
   metricReader: prometheusExporter,
-  instrumentations: [getNodeAutoInstrumentations()],
+  instrumentations: [getNodeAutoInstrumentations(), new RuntimeNodeInstrumentation()],
 });
 
 sdk.start();
@@ -49,6 +50,29 @@ const orderValue = meter.createHistogram('order_value', {
   description: 'Distribution of order values in USD',
   unit: 'USD',
 });
+const queuePublished = meter.createCounter('queue_messages_published_total', {
+  description: 'Total messages published to the queue by order-service',
+});
+const queuePublishDuration = meter.createHistogram('queue_publish_duration_ms', {
+  description: 'Time taken to publish a message to the queue',
+  unit: 'ms',
+});
+const ordersByStatus = meter.createCounter('orders_by_status_total', {
+  description: 'Orders counted by their lifecycle status transition',
+});
+const heapUsedGauge = meter.createObservableGauge('nodejs_heap_used_bytes', {
+  description: 'Node.js V8 heap used bytes',
+  unit: 'By',
+});
+const heapTotalGauge = meter.createObservableGauge('nodejs_heap_total_bytes', {
+  description: 'Node.js V8 heap total bytes',
+  unit: 'By',
+});
+meter.addBatchObservableCallback((obs) => {
+  const mem = process.memoryUsage();
+  obs.observe(heapUsedGauge, mem.heapUsed);
+  obs.observe(heapTotalGauge, mem.heapTotal);
+}, [heapUsedGauge, heapTotalGauge]);
 
 interface Order {
   id: number;
@@ -186,6 +210,7 @@ app.post('/orders', async (req: Request, res: Response) => {
     
     orders.set(newOrder.id, newOrder);
     ordersCreated.add(1, { status: 'success' });
+    ordersByStatus.add(1, { status: 'pending' });
     orderValue.record(total);
     
     span.setAttribute('order.id', newOrder.id);
@@ -204,7 +229,10 @@ app.post('/orders', async (req: Request, res: Response) => {
         timestamp: new Date().toISOString(),
       });
 
+      const publishStart = Date.now();
       await queue.publish(notification);
+      queuePublishDuration.record(Date.now() - publishStart);
+      queuePublished.add(1);
       span.addEvent('Notification published to queue');
     }
     
@@ -253,7 +281,8 @@ app.patch('/orders/:id/status', (req: Request, res: Response) => {
   
   order.status = status;
   order.updatedAt = new Date();
-  
+  ordersByStatus.add(1, { status });
+
   span.addEvent('Order status updated');
   span.end();
   
