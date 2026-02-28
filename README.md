@@ -1,4 +1,4 @@
-# Observability Demo — Microservices with OpenTelemetry
+# Distributed Observability Lab — OTel, Prometheus, Loki, Alertmanager
 
 ![CI](https://github.com/jeziellopes/observability/actions/workflows/ci.yml/badge.svg)
 
