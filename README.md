@@ -1,8 +1,18 @@
 # Observability Demo — Microservices with OpenTelemetry
 
+![CI](https://github.com/jeziellopes/observability/actions/workflows/ci.yml/badge.svg)
+
 A portfolio project demonstrating the three pillars of observability — **traces, metrics, and logs** — across a distributed microservices system on AWS.
 
 Covers distributed tracing across HTTP services, async queue boundaries, and serverless functions using OpenTelemetry as the single instrumentation layer.
+
+**What this demonstrates for SRE roles:**
+- End-to-end distributed tracing across HTTP, async queue boundaries, and serverless (OTel W3C propagation)
+- RED metrics with SLO error budget tracking and multi-window burn rate alerting
+- Structured log–trace correlation: every log line carries `traceId`/`spanId`, queryable via Loki
+- Full alerting pipeline: Prometheus rules → Alertmanager with severity routing and inhibition logic
+- Pluggable queue transport (Redis local / SQS on AWS) with manual trace context propagation
+- IaC: Terraform + ECS Fargate + Lambda — deployable to AWS with a single `terraform apply`
 
 ---
 
@@ -12,7 +22,8 @@ Covers distributed tracing across HTTP services, async queue boundaries, and ser
 |-------|-----------|
 | Tracing | OpenTelemetry + Jaeger |
 | Metrics | Prometheus + Grafana |
-| Logs | Winston + trace correlation |
+| Logs | Loki + Promtail + Winston (structured JSON) |
+| Alerting | Alertmanager (severity routing, inhibition) |
 | Services | TypeScript + Express (×4) + AWS Lambda |
 | Queue | AWS SQS (production) / Redis (local dev) |
 | Infra | Terraform + ECS Fargate + Docker Compose |
@@ -187,7 +198,7 @@ curl -X POST http://localhost:3000/api/orders \
 open http://localhost:16686
 ```
 
-Service ports: API Gateway `:3000` · User `:3001` · Order `:3002` · Notification `:3003` · Jaeger UI `:16686` · Prometheus `:9090` · Grafana `:3100` (admin/admin)
+Service ports: API Gateway `:3000` · User `:3001` · Order `:3002` · Notification `:3003` · Jaeger UI `:16686` · Prometheus `:9090` · Grafana `:3100` (admin/admin) · Alertmanager `:9093` · Loki `:3110`
 
 ---
 
@@ -266,7 +277,15 @@ cd lambda && npm install && npm run build  # → lambda.zip
 
 ## Demonstration
 
-![Screen](./sample.png)
+Run `docker-compose up --build`, generate traffic with `./scripts/traffic-simulator.sh`, then explore:
+
+| UI | URL | What to look for |
+|---|---|---|
+| Jaeger | http://localhost:16686 | End-to-end traces: HTTP → queue → Lambda |
+| Grafana | http://localhost:3100 | RED metrics, SLO error budget, runtime panels |
+| Grafana → Explore → Loki | http://localhost:3100 | Structured logs; click `traceId` to jump to Jaeger |
+| Alertmanager | http://localhost:9093 | Firing/resolved alert state across all services |
+| Prometheus | http://localhost:9090/alerts | Raw alert rule evaluation |
 
 ---
 
@@ -275,7 +294,7 @@ cd lambda && npm install && npm run build  # → lambda.zip
 - ⚠️ Demo project — no auth, HTTP only, no secret management
 - Set `LOG_LEVEL=debug` in any service for verbose structured JSON logs
 
-**Documentation**: [PLAN.md](PLAN.md) · [TASKS.md](TASKS.md) · [infrastructure/terraform/README.md](infrastructure/terraform/README.md) · [lambda/README.md](lambda/README.md)
+**Documentation**: [PLAN_SRE.md](PLAN_SRE.md) · [infrastructure/terraform/README.md](infrastructure/terraform/README.md) · [lambda/README.md](lambda/README.md)
 
 ---
 
