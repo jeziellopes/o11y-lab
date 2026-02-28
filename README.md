@@ -9,7 +9,7 @@
 
 I built this to get hands-on with the full o11y stack — not just traces or just metrics in isolation, but how the three pillars actually connect in a distributed system and where things break down.
 
-The interesting parts were the async queue boundary (OTel has no native mechanism there, so trace context has to be serialized manually into the message payload), the SLO burn rate math in Prometheus, and getting Loki → Grafana → Jaeger linked so a log line's `traceId` takes you directly to the trace.
+The interesting parts were the async queue boundary (OTel has no native mechanism there, so trace context has to be serialized manually into the message payload), the SLO burn rate math in Prometheus, and getting Loki → Grafana → Jaeger linked so when I see a log line with a `traceId`, I can jump straight to the trace.
 
 Runs locally with `docker-compose up`. Deploys to AWS ECS + Lambda via Terraform.
 
